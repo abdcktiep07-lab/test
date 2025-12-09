@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ISO 14064-1 測驗平台 (手機優化版 v3.1)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Microsoft JhengHei";
+            background-color: #f0f9ff;
+            -webkit-tap-highlight-color: transparent; /* Remove blue highlight on tap */
+        }
+        .animate-slide-up {
+            animation: slideUp 0.4s ease-out;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        /* Hide scrollbar but keep functionality */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Icons (SVG) ---
+        const Icon = ({ children, className, ...props }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>
+        );
+        const Download = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></Icon>;
+        const Upload = (props) => <Icon {...props}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></Icon>;
+        const UserIcon = (props) => <Icon {...props}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Icon>;
+        const ChevronLeft = (props) => <Icon {...props}><polyline points="15 18 9 12 15 6"/></Icon>;
+        const CheckCircle = (props) => <Icon {...props}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></Icon>;
+        const AlertCircle = (props) => <Icon {...props}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></Icon>;
+
+        // --- 完整題庫 (75題) ---
+        const FULL_QUESTION_BANK = [
+             // 簡單 (Simple) 1-25
+            { id: 1, level: 'simple', type: '理論', question: '根據 ISO 14064-1 標準，查證（verification）的定義為何？', options: ['A. 專注於減少溫室氣體排放量', 'B. 對照協議的查證準則，評估溫室氣體主張的數據與品質合理性', 'C. 確認未來營運計畫的合理性', 'D. 僅限於外部獨立團體執行'], answer: 'B', explanation: '查證是評估溫室氣體主張之數據與品質合理性的系統化過程。' },
+            { id: 2, level: 'simple', type: '理論', question: 'ISO 14064-1 溫室氣體盤查的五大原則中，要求「實務上儘可能減少偏差與不確定性」的是哪一項？', options: ['A. 相關性', 'B. 完整性', 'C. 準確度', 'D. 透明度'], answer: 'C', explanation: '準確度（Accuracy）原則要求儘可能減少偏差與不確定性。' },
+            { id: 3, level: 'simple', type: '理論', question: '根據 ISO 14064-1 標準，類別 1（範疇一）直接溫室氣體排放的定義是？', options: ['A. 由外購電力或蒸汽產生的排放', 'B. 來自組織所擁有或控制的溫室氣體源之排放', 'C. 由員工通勤或商務旅運產生的排放', 'D. 由供應鏈運輸產生的排放'], answer: 'B', explanation: '類別 1 為組織擁有或控制的直接排放。' },
+            { id: 4, level: 'simple', type: '理論', question: 'A公司外購台電電力所產生的溫室氣體排放，應歸類為 ISO 14064-1 的哪一類別？', options: ['A. 類別 1：直接排放', 'B. 類別 2：輸入能源的間接排放', 'C. 類別 3：運輸的間接排放', 'D. 類別 4：組織使用產品的間接排放'], answer: 'B', explanation: '外購電力屬於類別 2（輸入能源的間接排放）。' },
+            { id: 5, level: 'simple', type: '理論', question: '類別 3（範疇三）間接溫室氣體排放主要與下列哪項活動相關？', options: ['A. 固定式燃燒源', 'B. 輸入能源', 'C. 運輸', 'D. 逸散性排放源'], answer: 'C', explanation: '類別 3 是由運輸產生的間接排放。' },
+            { id: 6, level: 'simple', type: '理論', question: '溫室氣體排放量的量化計算中，活動數據乘以排放係數後，還需乘以哪個數值才能換算成二氧化碳當量（CO2e）？', options: ['A. 碳氧化率', 'B. 全球暖化潛勢（GWP）', 'C. 淨熱值（NCV）', 'D. 產量數據'], answer: 'B', explanation: '需乘以 GWP 值將各種氣體轉換為 CO2e。' },
+            { id: 7, level: 'simple', type: '理論', question: '查證準則應涵蓋哪些項目？', options: ['A. 國際 ISO 14064 標準、政府要求規範、公司內部管理規定', 'B. 溫室氣體減量專案方法學', 'C. 碳交易市場規範', 'D. 國際氣候變遷公約'], answer: 'A', explanation: '查證準則包括國際標準、法規及內部規定。' },
+            { id: 8, level: 'simple', type: '理論', question: 'ISO 14064-1 的「完整性」原則要求組織必須做到什麼？', options: ['A. 揭露充分且適當的資訊', 'B. 實務上儘可能減少不確定性', 'C. 納入所有相關的溫室氣體排放與移除', 'D. 選擇與預期使用者需求相關的數據'], answer: 'C', explanation: '完整性要求納入所有相關的排放與移除。' },
+            { id: 9, level: 'simple', type: '實務', question: '進行 ISO 14064-1 內部查證時，查證人員應依據何種文件進行規劃和執行？', options: ['A. 公司的年度財務報告', 'B. 競爭對手的溫室氣體報告', 'C. 擬定的內部查證計畫', 'D. 環境部最新發布的查驗指引'], answer: 'C', explanation: '查證工作應依據「內部查證計畫」執行。' },
+            { id: 10, level: 'simple', type: '實務', question: 'A公司工廠內公務車使用汽油或柴油產生的排放，屬於哪一類排放型式？', options: ['A. 固定燃燒排放源', 'B. 製程排放源', 'C. 移動燃燒排放源', 'D. 逸散排放源'], answer: 'C', explanation: '公務車燃料燃燒屬於移動式燃燒源。' },
+            { id: 11, level: 'simple', type: '實務', question: '查證過程中發現不符合事項，應如何處理？', options: ['A. 將其排除於報告之外', 'B. 記錄並提出糾正措施建議', 'C. 僅針對重大問題進行處理', 'D. 等待外部審核時解決'], answer: 'B', explanation: '應開立查證缺點及矯正處理單。' },
+            { id: 12, level: 'simple', type: '實務', question: 'A公司工廠進行內部查證時，查證人員應具備的基本認知之一是？', options: ['A. 具備高階會計資格', 'B. 瞭解溫室氣體查證之作業流程', 'C. 擁有豐富的國際貿易知識', 'D. 對所有部門的工作職責有深入了解'], answer: 'B', explanation: '查證人員需瞭解查證作業流程。' },
+            { id: 13, level: 'simple', type: '實務', question: '使用自廠檢測的熱值或碳含量，必須確認檢測實驗室符合哪個標準？', options: ['A. ISO 9001', 'B. CNS 17025 或 ISO/IEC 17025', 'C. ISO 14064-1', 'D. ISO 50001'], answer: 'B', explanation: '應由取得 ISO/IEC 17025 認證之實驗室提供。' },
+            { id: 14, level: 'simple', type: '實務', question: '以下何者最有助於確認電力使用數據準確性？', options: ['A. 廠區安全手冊', 'B. 員工薪資記錄', 'C. 能源使用計費單（電費單）', 'D. 市場供應報表'], answer: 'C', explanation: '電費單是確認電力數據的文件性證據。' },
+            { id: 15, level: 'simple', type: '實務', question: '查證人員針對量測設備進行直接觀察，所蒐集到的證據類型是什麼？', options: ['A. 證詞性證據', 'B. 文件性證據', 'C. 物理性證據', 'D. 間接證據'], answer: 'C', explanation: '直接觀察設備屬於物理性證據。' },
+            { id: 16, level: 'simple', type: '案例', question: '冷氣機組中的冷媒逸散屬於類別 1 中的哪個子類別？', options: ['A. 固定燃燒源', 'B. 移動燃燒源', 'C. 製程排放源', 'D. 逸散性排放源'], answer: 'D', explanation: '冷媒逸散屬於逸散性排放源。' },
+            { id: 17, level: 'simple', type: '案例', question: '採購原料運輸（上游運輸）產生的排放屬於哪個類別？', options: ['A. 類別 1', 'B. 類別 2', 'C. 類別 3', 'D. 類別 4'], answer: 'C', explanation: '上游運輸屬於類別 3。' },
+            { id: 18, level: 'simple', type: '案例', question: '焊條使用所造成的排放屬於哪種型式？', options: ['A. 固定燃燒', 'B. 移動燃燒', 'C. 製程排放', 'D. 逸散排放'], answer: 'C', explanation: '氣焊與電焊屬於製程排放。' },
+            { id: 19, level: 'simple', type: '案例', question: '「類別三 員工通勤」主要關聯的間接排放源是什麼？', options: ['A. 辦公室外購電力', 'B. 員工搭乘大眾交通工具或私家車', 'C. 公務車排放', 'D. 冷氣冷媒逸散'], answer: 'B', explanation: '員工通勤（非公司車輛）屬於類別 3。' },
+            { id: 20, level: 'simple', type: '案例', question: '營運廢棄物處理排放屬於哪個類別？', options: ['A. 類別 1', 'B. 類別 2', 'C. 類別 3', 'D. 類別 4'], answer: 'D', explanation: '廢棄物處置屬於類別 4。' },
+            { id: 21, level: 'simple', type: '案例', question: '堆高機使用的柴油燃料消耗，應歸類於哪一類別？', options: ['A. 類別 1', 'B. 類別 2', 'C. 類別 3', 'D. 類別 4'], answer: 'A', explanation: '堆高機為組織控制的移動源，屬類別 1。' },
+            { id: 22, level: 'simple', type: '案例', question: '類別 1 的排放量數據屬於哪種排放類型？', options: ['A. 直接溫室氣體排放', 'B. 能源間接', 'C. 運輸間接', 'D. 其他間接'], answer: 'A', explanation: '類別 1 即為直接排放。' },
+            { id: 23, level: 'simple', type: '案例', question: '類別 2（外購電力）的排放量屬於哪種溫室氣體排放？', options: ['A. 直接排放', 'B. 間接排放', 'C. 移除量', 'D. 專案減量'], answer: 'B', explanation: '類別 2 是能源間接排放。' },
+            { id: 24, level: 'simple', type: '案例', question: '緊急發電機使用的柴油燃料消耗應歸類於？', options: ['A. 範疇一（類別 1）', 'B. 範疇二', 'C. 範疇三', 'D. 範疇四'], answer: 'A', explanation: '緊急發電機為固定燃燒源，屬類別 1。' },
+            { id: 25, level: 'simple', type: '案例', question: '冷媒 R-134a 的 GWP 值數據屬於量化計算中的哪個要素？', options: ['A. 活動數據', 'B. 排放係數', 'C. GWP 值', 'D. 產量數據'], answer: 'C', explanation: 'GWP 值用於轉換 CO2e。' },
+            
+            // 一般 (General) 26-45
+            { id: 26, level: 'general', type: '理論', question: '實質性門檻（Materiality Threshold）的定量準則通常設定為多少？', options: ['A. 3.0%', 'B. 5.0%', 'C. 7.0%', 'D. 10.0%'], answer: 'B', explanation: '一般實質性門檻為 5%。' },
+            { id: 27, level: 'general', type: '理論', question: '當溫室氣體排放量變動超過顯著性門檻時應重新計算基準年，該門檻值為多少？', options: ['A. 0.5%', 'B. 3.0%', 'C. 5.0%', 'D. 7.0%'], answer: 'B', explanation: '顯著性門檻通常為 3.0%。' },
+            { id: 28, level: 'general', type: '理論', question: 'ISO 14064-1:2018 新版中，組織的間接溫室氣體排放共分為幾類？', options: ['A. 兩類', 'B. 三類', 'C. 五類（類別 2 至類別 6）', 'D. 六類'], answer: 'C', explanation: '間接排放包含類別 2 至 6，共五類。' },
+            { id: 29, level: 'general', type: '理論', question: '透明度原則要求組織必須做到什麼？', options: ['A. 納入所有排放', 'B. 減少不確定性', 'C. 揭露充分且適當資訊，使決策合理可信', 'D. 進行比較'], answer: 'C', explanation: '透明度要求揭露充分資訊以供決策。' },
+            { id: 30, level: 'general', type: '理論', question: '採用「控制權」方法時，組織需負責多少比例的排放量？', options: ['A. 依股權比例', 'B. 100%', 'C. 僅類別 1 和 2', 'D. 依總量比例'], answer: 'B', explanation: '控制權法下，組織對具控制權的營運負 100% 責任。' },
+            { id: 31, level: 'general', type: '實務', question: '查證人員採用「重新計算」（re-computation）技術的主要目的是什麼？', options: ['A. 獲得第三方確認', 'B. 尋找原始數據錯誤', 'C. 查核溫室氣體清單（排放量）的正確性', 'D. 發現遺漏'], answer: 'C', explanation: '重新計算是為了驗證運算結果的正確性。' },
+            { id: 32, level: 'general', type: '實務', question: '計算外購電力（Category 2）時，應引用哪一種排碳係數？', options: ['A. 供應商提供', 'B. 經濟部公告之電力排碳係數', 'C. IPCC 係數', 'D. 自廠檢測'], answer: 'B', explanation: '應引用經濟部能源局公告之最新係數。' },
+            { id: 33, level: 'general', type: '實務', question: '建議應使用哪個機構最新公布的 GWP 值？', options: ['A. 環境部', 'B. IEA', 'C. IPCC', 'D. UNEP'], answer: 'C', explanation: '應使用 IPCC 最新公布的 GWP 值。' },
+            { id: 34, level: 'general', type: '實務', question: '透過面談技術所蒐集到的證據類型是什麼？', options: ['A. 物理性證據', 'B. 文件性證據', 'C. 證詞性證據', 'D. 間接證據'], answer: 'C', explanation: '面談所得為證詞性證據。' },
+            { id: 35, level: 'general', type: '實務', question: '針對量化排放係數，最優先採用的順序是？', options: ['A. 場址特定數據（自廠檢測）', 'B. 國家係數', 'C. 國際係數', 'D. 供應商係數'], answer: 'A', explanation: '自廠量測數據（場址特定）為最優先。' },
+            { id: 36, level: 'general', type: '實務', question: '發現有兩種以上排放係數可用時，應如何選用以符合準確度原則？', options: ['A. 選擇最低係數', 'B. 選擇政府公告係數', 'C. 選擇自身量測數據為第一優先', 'D. 選擇最易取得係數'], answer: 'C', explanation: '自身量測數據優先，以符合準確度。' },
+            { id: 37, level: 'general', type: '實務', question: '緊急發電機與堆高機共用油槽，活動數據無法切割時應如何處理？', options: ['A. 僅計入較高者', 'B. 可擇一代表登錄，其餘註明', 'C. 平均分配', 'D. 調整邊界'], answer: 'B', explanation: '可擇一代表登錄並註明，避免重複或遺漏。' },
+            { id: 38, level: 'general', type: '實務', question: 'GWP 值引用錯誤屬於哪個實質性議題？', options: ['A. 邊界完整性', 'B. 排放係數選用的準確性', 'C. 數據可靠性', 'D. 基準年一致性'], answer: 'B', explanation: 'GWP 錯誤屬於係數選用不當（準確性）。' },
+            { id: 39, level: 'general', type: '實務', question: '誤將公務小貨車的柴油消耗歸類為類別 3，是否正確？', options: ['A. 正確', 'B. 正確，非固定源', 'C. 不正確，應屬類別 1', 'D. 不正確，應屬類別 4'], answer: 'C', explanation: '公務車由組織控制，屬類別 1。' },
+            { id: 40, level: 'general', type: '實務', question: '電費單據日期與計費期間不一致，這類錯誤屬於？', options: ['A. 遺漏佐證', 'B. 數據蒐集的時間週期與盤查時間不一致', 'C. 單位未轉換', 'D. 未考慮庫存'], answer: 'B', explanation: '這是時間週期不一致的常見問題。' },
+            { id: 41, level: 'general', type: '案例', question: 'LPG（液化石油氣）主要成分為丙烷及丁烷，是否需列入溫室氣體排放？', options: ['A. 必須列入', 'B. 不需列入，因非屬列管 GHG', 'C. 僅計算 CO2', 'D. 需分開報告'], answer: 'B', explanation: 'LPG 主要成分非 GHG，燃燒後產生的 CO2 才需計算，直接逸散不計。' },
+            { id: 42, level: 'general', type: '案例', question: '訪談確認電力數據管理流程，屬於哪種證據蒐集？', options: ['A. 物理性證據', 'B. 文件性證據', 'C. 證詞性證據', 'D. 重新計算'], answer: 'C', explanation: '訪談屬於證詞性證據。' },
+            { id: 43, level: 'general', type: '案例', question: '使用五年前的排放因子違反了哪個原則？', options: ['A. 完整性', 'B. 一致性', 'C. 準確度', 'D. 透明度'], answer: 'C', explanation: '過時因子增加偏差，違反準確度。' },
+            { id: 44, level: 'general', type: '案例', question: '電力 1,500,000 kWh，錯誤係數 0.530，正確 0.509，高估量為多少？', options: ['A. 10,500 kg', 'B. 31,500 kg', 'C. 763,500 kg', 'D. 795,000 kg'], answer: 'B', explanation: '1,500,000 * (0.530 - 0.509) = 31,500 kg。' },
+            { id: 45, level: 'general', type: '案例', question: 'R-134a 屬於哪一類溫室氣體？', options: ['A. CFCs', 'B. HCFCs', 'C. HFCs', 'D. PFCs'], answer: 'C', explanation: 'R-134a 屬於氫氟碳化物（HFCs）。' },
+
+            // 困難 (Difficult) 46-75
+            { id: 46, level: 'difficult', type: '理論', question: '非人為生物源溫室氣體排放應如何處理？', options: ['A. 計入類別 1', 'B. 忽略不計', 'C. 可予以量化，若進行時應分別報告之', 'D. 計入類別 6'], answer: 'C', explanation: '非人為生物源排放應分別報告。' },
+            { id: 47, level: 'difficult', type: '理論', question: '查驗機構執行組織型查驗時，實質性門檻通常設定為多少？', options: ['A. 3%', 'B. 5%', 'C. 7%', 'D. 10%'], answer: 'B', explanation: '組織型查驗之實質性門檻通常為 5%。' },
+            { id: 48, level: 'difficult', type: '理論', question: '決定納入間接排放源時，應建立何種準則以決定重大性？', options: ['A. 財務門檻', 'B. 市場佔有率', 'C. 重大性準則', 'D. 法律責任'], answer: 'C', explanation: '應依據「重大性準則」鑑別間接排放。' },
+            { id: 49, level: 'difficult', type: '理論', question: '排放量變動超過顯著性門檻需重新計算基準年，適用於哪種情況？', options: ['A. 生產水準改變', 'B. 累積誤差', 'C. 組織邊界或計算方法的改變', 'D. 重大源改變'], answer: 'C', explanation: '邊界或計算方法改變導致顯著變動時需重算。' },
+            { id: 50, level: 'difficult', type: '理論', question: '溫室氣體報告除排放量外，還應揭露什麼？', options: ['A. 公司淨利', 'B. 排放係數的參考或文件', 'C. 對手數據', 'D. 設備折舊'], answer: 'B', explanation: '必須揭露係數來源或參考文件。' },
+            { id: 51, level: 'difficult', type: '實務', question: '誤用高位熱值 (HHV) 而非低位熱值 (LHV) 計算，會導致什麼結果？', options: ['A. 係數被低估', 'B. 排放量被高估', 'C. 排放量被低估', 'D. 無影響'], answer: 'B', explanation: '未轉換 LHV 直接用 HHV 會導致排放量高估。' },
+            { id: 52, level: 'difficult', type: '實務', question: '針對高風險排放源，應採用哪種查證手法確保數據流完整性？', options: ['A. 水平查證', 'B. 隨機查證', 'C. 垂直查證（路徑查證）', 'D. 文件審查'], answer: 'C', explanation: '垂直查證可追溯完整數據路徑。' },
+            { id: 53, level: 'difficult', type: '實務', question: '航空貨物運輸服務的排放因子屬於哪種數據品質等級？', options: ['A. 自廠實測', 'B. 國家公告', 'C. 參考級碳係數', 'D. IPCC 係數'], answer: 'C', explanation: '航空貨運通常使用參考級碳係數。' },
+            { id: 54, level: 'difficult', type: '實務', question: '盤查清冊未設定連動公式，導致係數更新不完全，屬於哪方面的問題？', options: ['A. 管理資訊', 'B. 製程資訊', 'C. 數據資訊面向', 'D. 邊界設定'], answer: 'C', explanation: '公式設定錯誤屬於數據資訊面向缺失。' },
+            { id: 55, level: 'difficult', type: '實務', question: '遺漏含有 HFCs 的 WD-40 排放源，最可能被哪種手法發現？', options: ['A. 核對財報', 'B. 重新計算', 'C. 現場勘查與人員對談', 'D. 檢查逸散率'], answer: 'C', explanation: '現場勘查與對談能有效發現遺漏排放源。' },
+            { id: 56, level: 'difficult', type: '案例', question: '電力 1,500 千度，係數 0.509，排放當量是多少？', options: ['A. 795.00', 'B. 763.50', 'C. 758.00', 'D. 814.50'], answer: 'B', explanation: '1500 * 0.509 = 763.50 公噸 CO2e。' },
+            { id: 57, level: 'difficult', type: '案例', question: '誤將宿舍瓦斯列入（非邊界）且燃料種類鑑別錯誤（LNG/LPG），屬於？', options: ['A. 單位錯誤', 'B. 係數錯誤', 'C. 邊界設定錯誤與燃料鑑別錯誤', 'D. GWP 錯誤'], answer: 'C', explanation: '宿舍非邊界且燃料種類弄錯，屬邊界與鑑別雙重錯誤。' },
+            { id: 58, level: 'difficult', type: '案例', question: '緊急發電機（固定）與堆高機（移動），緊急發電機應選用哪種柴油 EF？', options: ['A. 柴油（固定排放源）EF', 'B. 柴油（移動排放源）EF', 'C. 混合 EF', 'D. CO2 EF'], answer: 'A', explanation: '發電機是固定源，應選用固定源 EF。' },
+            { id: 59, level: 'difficult', type: '案例', question: '緊急發電機柴油 0.2 公秉，N2O 固定源 EF 0.0000211，GWP 273，排放當量約為？', options: ['A. 0.00422', 'B. 0.0012', 'C. 0.00574', 'D. 0.001'], answer: 'B', explanation: '0.2 * 0.0000211 * 273 ≈ 0.00115，約 0.0012。' },
+            { id: 60, level: 'difficult', type: '案例', question: '誤用舊版 SF6 GWP (23,000) 低於新版 (25,200)，結果會？', options: ['A. 高估', 'B. 低估', 'C. 不變', 'D. 無法判定'], answer: 'B', explanation: '係數用小了，結果會被低估。' },
+            { id: 61, level: 'difficult', type: '案例', question: '環境延長投入產出分析法（EEIO）屬於哪一學科領域？', options: ['A. 經濟學', 'B. 生物學', 'C. 物理學', 'D. 化學'], answer: 'A', explanation: 'EEIO 是經濟學模型。' },
+            { id: 62, level: 'difficult', type: '案例', question: '太陽能發電憑證需符合什麼條件才能算零排放？', options: ['A. 風力憑證', 'B. 國際核發', 'C. 電證合一且年度相同', 'D. 不影響'], answer: 'C', explanation: '需電證合一且年度相符。' },
+            { id: 63, level: 'difficult', type: '案例', question: '類別 4 廢棄物處理排放應計算到生命週期哪一階段？', options: ['A. 搖籃到門口', 'B. 搖籃到最終處置（Grave）', 'C. 僅運輸', 'D. 僅產生'], answer: 'B', explanation: '廢棄物處理應包含到最終處置階段。' },
+            { id: 64, level: 'difficult', type: '案例', question: 'HFC-R417 (0.6kg total), 逸散率 8%, GWP 2508, 排放當量約？', options: ['A. 0.016', 'B. 0.040', 'C. 0.120', 'D. 40.128'], answer: 'C', explanation: '0.6 * 0.08 * 2508 / 1000 ≈ 0.120 公噸。' },
+            { id: 65, level: 'difficult', type: '案例', question: '誤將外購電力（類別 2）歸為類別 1，屬於哪種實質性議題？', options: ['A. 刻意挑選', 'B. 組織及營運邊界未釐清', 'C. 公式錯誤', 'D. 重複計算'], answer: 'B', explanation: '類別歸屬錯誤屬於邊界未釐清。' },
+            { id: 66, level: 'difficult', type: '案例', question: '通勤問卷缺乏燃料與里程資訊，導致假設粗略，屬於？', options: ['A. 邊界未釐清', 'B. 紀錄不系統', 'C. 數據之不確定性', 'D. 實質改變'], answer: 'C', explanation: '缺乏關鍵數據導致推估不準，屬數據不確定性。' },
+            { id: 67, level: 'difficult', type: '案例', question: '核對第三方物流排放數據，應採用哪種查證方法？', options: ['A. 單據證據（Vouching）', 'B. 確認', 'C. 重新追溯', 'D. 重新計算'], answer: 'A', explanation: '調閱物流單據屬於 Vouching。' },
+            { id: 68, level: 'difficult', type: '案例', question: '公務車隊冷媒 R-134a 逸散應歸類為？', options: ['A. 類別 1：移動式燃燒', 'B. 類別 1：逸散性排放源', 'C. 類別 3', 'D. 類別 4'], answer: 'B', explanation: '公務車冷媒逸散屬類別 1 逸散源。' },
+            { id: 69, level: 'difficult', type: '案例', question: '化糞池（厭氧）產生的 CH4 屬於？', options: ['A. 固定燃燒', 'B. 製程排放', 'C. 移動燃燒', 'D. 逸散排放源'], answer: 'D', explanation: '化糞池排放屬逸散源。' },
+            { id: 70, level: 'difficult', type: '案例', question: '汽油數據未區分汽車與機車導致係數錯誤，屬於？', options: ['A. 單位錯誤', 'B. 時間不一致', 'C. 數據蒐集方式與量化方法不符', 'D. 係數單位不一致'], answer: 'C', explanation: '分類不清導致無法套用正確係數。' },
+            { id: 71, level: 'difficult', type: '案例', question: '活動數據來源優先順序，何者最高？', options: ['A. 會計憑單', 'B. 單位報表', 'C. 內部系統', 'D. 自行推估'], answer: 'A', explanation: '會計憑單（如發票）準確度最高。' },
+            { id: 72, level: 'difficult', type: '案例', question: 'CO2 滅火器 10kg 逸散，排放當量為？', options: ['A. 0.01 公噸', 'B. 10.0 公噸', 'C. 0.10 公噸', 'D. 1.00 公噸'], answer: 'A', explanation: '10kg = 0.01t, GWP=1, 0.01 * 1 = 0.01。' },
+            { id: 73, level: 'difficult', type: '案例', question: '使用舊版電力係數（0.543 vs 0.509），屬於？', options: ['A. 數據疏漏', 'B. 未使用最新之排放係數', 'C. 公式錯誤', 'D. 刻意挑選'], answer: 'B', explanation: '這屬於未使用最新係數。' },
+            { id: 74, level: 'difficult', type: '案例', question: '哪個步驟在現場查證之後，決定不符合事項處理？', options: ['A. 擬定計畫', 'B. 開始會議', 'C. 準備查證初稿與溝通', 'D. 追蹤'], answer: 'C', explanation: '現場查證後進行初稿準備與溝通。' },
+            { id: 75, level: 'difficult', type: '案例', question: '系統進貨日期與佐證不符，矯正方式為？', options: ['A. 忽略', 'B. 立即重新輸入正確的進貨日期', 'C. 改佐證', 'D. 調整基準年'], answer: 'B', explanation: '數據錯誤應立即更正。' },
+        ];
+
+        // --- 主程式 ---
+        function App() {
+            // view: login, student_menu, student_quiz, student_result, manager_dashboard
+            const [view, setView] = useState('login'); 
+            const [user, setUser] = useState({ name: '', dept: '' });
+            const [role, setRole] = useState('student');
+            const [level, setLevel] = useState('');
+            const [quizQuestions, setQuizQuestions] = useState([]);
+            const [answers, setAnswers] = useState({});
+            
+            // 資料儲存
+            const [localHistory, setLocalHistory] = useState([]);
+            const [managerData, setManagerData] = useState([]);
+
+            // 初始化：讀取本地紀錄
+            useEffect(() => {
+                const savedUser = localStorage.getItem('iso14064_user');
+                if (savedUser) setUser(JSON.parse(savedUser));
+                
+                const savedHistory = localStorage.getItem('iso14064_history');
+                if (savedHistory) setLocalHistory(JSON.parse(savedHistory));
+            }, []);
+
+            // 登入
+            const handleLogin = (e) => {
+                e.preventDefault();
+                localStorage.setItem('iso14064_user', JSON.stringify(user));
+                if (role === 'manager') {
+                    setView('manager_dashboard');
+                } else {
+                    setView('student_menu');
+                }
+            };
+
+            // 開始測驗
+            const startQuiz = (selectedLevel) => {
+                setLevel(selectedLevel);
+                const filtered = FULL_QUESTION_BANK.filter(q => q.level === selectedLevel);
+                const shuffled = [...filtered].sort(() => 0.5 - Math.random());
+                const selected = shuffled.slice(0, 10);
+                setQuizQuestions(selected);
+                setAnswers({});
+                setView('student_quiz');
+                window.scrollTo(0, 0);
+            };
+
+            // 提交測驗
+            const submitQuiz = () => {
+                let correctCount = 0;
+                quizQuestions.forEach(q => {
+                    if (answers[q.id] && answers[q.id].startsWith(q.answer)) correctCount++;
+                });
+                const score = correctCount * 10;
+                
+                const resultRecord = {
+                    id: Date.now(),
+                    date: new Date().toLocaleString(),
+                    name: user.name,
+                    dept: user.dept,
+                    level: level,
+                    score: score,
+                    details: quizQuestions.map(q => ({
+                        id: q.id,
+                        question: q.question,
+                        userAnswer: answers[q.id] || '未作答',
+                        correctAnswer: q.answer,
+                        isCorrect: (answers[q.id] || '').startsWith(q.answer),
+                        explanation: q.explanation
+                    }))
+                };
+
+                const newHistory = [resultRecord, ...localHistory];
+                setLocalHistory(newHistory);
+                localStorage.setItem('iso14064_history', JSON.stringify(newHistory));
+                setView('student_result');
+                window.scrollTo(0, 0);
+            };
+
+            // 手機版/電腦版通用下載 (JSON)
+            const downloadMyResult = () => {
+                const latest = localHistory[0];
+                if (!latest) return;
+                
+                const dataStr = JSON.stringify([latest], null, 2);
+                const blob = new Blob([dataStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a");
+                link.href = url;
+                const fileName = `ISO14064_${user.name}_${latest.score}分.json`;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            // 管理員：匯入
+            const handleImport = (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+
+                let newRecords = [];
+                let processedCount = 0;
+
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            if (Array.isArray(data)) {
+                                newRecords = [...newRecords, ...data];
+                            } else {
+                                newRecords.push(data);
+                            }
+                        } catch (err) {
+                            console.error("檔案解析錯誤:", file.name, err);
+                        }
+                        
+                        processedCount++;
+                        if (processedCount === files.length) {
+                            const uniqueRecords = [...managerData, ...newRecords].filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+                            uniqueRecords.sort((a, b) => new Date(b.date) - new Date(a.date));
+                            setManagerData(uniqueRecords);
+                            alert(`成功匯入 ${newRecords.length} 筆資料！`);
+                        }
+                    };
+                    reader.readAsText(file);
+                });
+            };
+
+            // 管理員：匯出 CSV
+            const exportManagerCSV = () => {
+                const bom = "\uFEFF";
+                let csvContent = "data:text/csv;charset=utf-8," + bom;
+                csvContent += "時間,姓名,部門,難度,分數,結果\n";
+                managerData.forEach(row => {
+                    const status = row.score >= 70 ? "通過" : "未通過";
+                    const cleanDate = row.date.replace(/,/g, ' ');
+                    csvContent += `${cleanDate},${row.name},${row.dept},${row.level},${row.score},${status}\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", `ISO14064_總成績報表_${new Date().toISOString().slice(0,10)}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            // --- 視圖 (Views) ---
+
+            // 1. 登入
+            if (view === 'login') {
+                return (
+                    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100">
+                        <div className="bg-white p-6 rounded-2xl shadow-xl w-full max-w-sm animate-slide-up">
+                            <div className="text-center mb-6">
+                                <h1 className="text-xl font-bold text-gray-800">ISO 14064-1 測驗平台</h1>
+                                <p className="text-gray-500 text-sm">v3.1 行動版</p>
+                            </div>
+                            <form onSubmit={handleLogin} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-2 bg-gray-100 p-1 rounded-lg">
+                                    <button type="button" onClick={() => setRole('student')} className={`py-2 text-sm font-bold rounded-md transition-all ${role === 'student' ? 'bg-white text-blue-600 shadow' : 'text-gray-500'}`}>我是學員</button>
+                                    <button type="button" onClick={() => setRole('manager')} className={`py-2 text-sm font-bold rounded-md transition-all ${role === 'manager' ? 'bg-white text-green-600 shadow' : 'text-gray-500'}`}>我是管理員</button>
+                                </div>
+                                <input required type="text" className="w-full p-3 rounded-lg border bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" value={user.name} onChange={e => setUser({...user, name: e.target.value})} placeholder={role==='student'?"請輸入姓名":"管理員名稱"} />
+                                <input required type="text" className="w-full p-3 rounded-lg border bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition" value={user.dept} onChange={e => setUser({...user, dept: e.target.value})} placeholder="部門 / 單位" />
+                                <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 shadow-lg active:scale-95 transition">進入系統</button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 2. 學員選單
+            if (view === 'student_menu') {
+                return (
+                    <div className="min-h-screen bg-slate-50 p-4 flex flex-col items-center">
+                        <div className="w-full max-w-md animate-slide-up">
+                            <div className="flex justify-between items-center mb-6">
+                                <div>
+                                    <h2 className="text-lg font-bold text-gray-800">Hi, {user.name}</h2>
+                                    <p className="text-xs text-gray-500">{user.dept}</p>
+                                </div>
+                                <button onClick={() => setView('login')} className="text-xs text-red-500 border border-red-200 px-3 py-1 rounded-full">登出</button>
+                            </div>
+
+                            <div className="space-y-4 mb-8">
+                                <button onClick={() => startQuiz('simple')} className="w-full bg-white p-5 rounded-xl shadow-sm border-l-4 border-green-400 flex items-center justify-between active:bg-gray-50">
+                                    <div className="text-left">
+                                        <h3 className="font-bold text-gray-800">🌱 簡單 (Simple)</h3>
+                                        <p className="text-xs text-gray-500 mt-1">基礎觀念與定義</p>
+                                    </div>
+                                    <span className="text-gray-300">&rarr;</span>
+                                </button>
+                                <button onClick={() => startQuiz('general')} className="w-full bg-white p-5 rounded-xl shadow-sm border-l-4 border-blue-400 flex items-center justify-between active:bg-gray-50">
+                                    <div className="text-left">
+                                        <h3 className="font-bold text-gray-800">🌿 一般 (General)</h3>
+                                        <p className="text-xs text-gray-500 mt-1">實務操作與計算</p>
+                                    </div>
+                                    <span className="text-gray-300">&rarr;</span>
+                                </button>
+                                <button onClick={() => startQuiz('difficult')} className="w-full bg-white p-5 rounded-xl shadow-sm border-l-4 border-red-400 flex items-center justify-between active:bg-gray-50">
+                                    <div className="text-left">
+                                        <h3 className="font-bold text-gray-800">🌲 困難 (Difficult)</h3>
+                                        <p className="text-xs text-gray-500 mt-1">進階案例分析</p>
+                                    </div>
+                                    <span className="text-gray-300">&rarr;</span>
+                                </button>
+                            </div>
+
+                            {localHistory.length > 0 && (
+                                <div className="bg-white rounded-xl shadow-sm p-4">
+                                    <h3 className="font-bold text-gray-700 text-sm mb-3">最近測驗紀錄</h3>
+                                    <div className="space-y-2">
+                                        {localHistory.slice(0, 3).map((h, i) => (
+                                            <div key={i} className="flex justify-between items-center text-sm border-b pb-2 last:border-0">
+                                                <span className="text-gray-500 text-xs">{h.date.split(' ')[0]}</span>
+                                                <span className={`px-2 py-0.5 rounded text-xs ${h.level==='simple'?'bg-green-100 text-green-800':h.level==='general'?'bg-blue-100 text-blue-800':'bg-red-100 text-red-800'}`}>{h.level}</span>
+                                                <span className={`font-bold ${h.score>=70?'text-green-600':'text-red-500'}`}>{h.score}分</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+            }
+
+            // 3. 學員測驗中
+            if (view === 'student_quiz') {
+                return (
+                    <div className="min-h-screen bg-slate-50 flex flex-col">
+                        <div className="bg-white shadow-sm p-4 sticky top-0 z-10 flex justify-between items-center">
+                            <span className="font-bold text-gray-700">測驗中 ({Object.keys(answers).length}/10)</span>
+                            <button onClick={() => setView('student_menu')} className="text-gray-400">退出</button>
+                        </div>
+                        
+                        <div className="flex-grow p-4 space-y-6 max-w-lg mx-auto w-full">
+                            {quizQuestions.map((q, idx) => (
+                                <div key={q.id} className="bg-white p-5 rounded-xl shadow-sm">
+                                    <div className="flex gap-3 mb-4">
+                                        <span className="bg-blue-100 text-blue-800 font-bold px-2 py-1 rounded text-xs h-fit">Q{idx + 1}</span>
+                                        <h3 className="font-bold text-gray-800 text-base">{q.question}</h3>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {q.options.map((opt, i) => (
+                                            <label key={i} className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer transition-all active:bg-blue-50 relative overflow-hidden">
+                                                <input type="radio" name={`q-${q.id}`} className="custom-radio w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500 hidden" 
+                                                    checked={answers[q.id] === opt} onChange={() => setAnswers({...answers, [q.id]: opt})} />
+                                                <div className={`w-full h-full absolute top-0 left-0 transition-colors ${answers[q.id] === opt ? 'bg-blue-50 border-2 border-blue-500' : ''} -z-10 rounded-lg`}></div>
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center bg-white ${answers[q.id] === opt ? 'border-blue-500' : 'border-gray-300'}`}>
+                                                    {answers[q.id] === opt && <div className="w-3 h-3 bg-blue-500 rounded-full"></div>}
+                                                </div>
+                                                <span className={`text-sm ${answers[q.id] === opt ? 'text-blue-900 font-bold' : 'text-gray-600'}`}>{opt}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="p-4 bg-white border-t sticky bottom-0">
+                            <button onClick={submitQuiz} disabled={Object.keys(answers).length < 10}
+                                className={`w-full py-3 rounded-xl font-bold text-white shadow-lg transition-all ${Object.keys(answers).length < 10 ? 'bg-gray-300' : 'bg-green-600 active:scale-95'}`}>
+                                {Object.keys(answers).length < 10 ? `還有 ${10 - Object.keys(answers).length} 題未完成` : '提交試卷'}
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 4. 學員結果 (含手機下載提示)
+            if (view === 'student_result') {
+                const result = localHistory[0];
+                return (
+                    <div className="min-h-screen bg-slate-50 p-4">
+                        <div className="max-w-lg mx-auto space-y-4 animate-slide-up">
+                            <div className="bg-white p-6 rounded-2xl shadow text-center">
+                                <div className="text-5xl mb-2">{result.score >= 70 ? '🎉' : '💪'}</div>
+                                <h2 className="text-3xl font-black text-gray-800">{result.score}分</h2>
+                                <p className={`font-bold mt-1 ${result.score >= 70 ? 'text-green-600' : 'text-red-500'}`}>{result.score >= 70 ? '通過測驗！' : '請再加油'}</p>
+                                
+                                <div className="mt-6 space-y-3">
+                                    <button onClick={downloadMyResult} className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold shadow active:scale-95 flex items-center justify-center gap-2">
+                                        <Download className="w-5 h-5" /> 下載成績檔 (交給管理員)
+                                    </button>
+                                    <div className="text-xs text-gray-400 bg-gray-50 p-3 rounded-lg text-left leading-relaxed">
+                                        <p className="font-bold mb-1">📱 手機下載提示：</p>
+                                        <ul className="list-disc pl-4 space-y-1">
+                                            <li><strong>iPhone (Safari)</strong>：點選後請選擇「下載」，檔案會儲存在「檔案」App 的「下載項目」中。</li>
+                                            <li><strong>Android</strong>：檔案會直接儲存至「Downloads」資料夾。</li>
+                                        </ul>
+                                    </div>
+                                    <button onClick={() => setView('student_menu')} className="w-full py-3 border border-gray-300 text-gray-600 rounded-xl font-bold">回首頁</button>
+                                </div>
+                            </div>
+
+                            <div className="bg-white rounded-2xl shadow p-4">
+                                <h3 className="font-bold text-gray-800 mb-4 border-l-4 border-blue-500 pl-2">解析</h3>
+                                <div className="space-y-4">
+                                    {result.details.map((item, idx) => (
+                                        <div key={idx} className={`p-4 rounded-xl border ${item.isCorrect ? 'bg-green-50 border-green-100' : 'bg-red-50 border-red-100'}`}>
+                                            <div className="flex justify-between mb-2">
+                                                <span className="font-bold text-sm text-gray-700">Q{idx + 1}</span>
+                                                {item.isCorrect ? <CheckCircle className="w-5 h-5 text-green-600" /> : <AlertCircle className="w-5 h-5 text-red-500" />}
+                                            </div>
+                                            <p className="text-sm font-bold text-gray-800 mb-2">{item.question}</p>
+                                            <p className="text-xs text-gray-500 mb-1">正解：{item.correctAnswer}</p>
+                                            <p className="text-xs text-gray-600 bg-white/50 p-2 rounded">{item.explanation}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // 5. 管理員後台 (保持原功能，稍微優化排版)
+            if (view === 'manager_dashboard') {
+                return (
+                    <div className="min-h-screen bg-slate-100 p-4">
+                        <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col h-[calc(100vh-2rem)]">
+                            <div className="p-5 border-b bg-gray-50 flex justify-between items-center">
+                                <div>
+                                    <h2 className="text-xl font-bold text-gray-800">管理員後台</h2>
+                                    <p className="text-xs text-gray-500">已匯入 {managerData.length} 筆資料</p>
+                                </div>
+                                <button onClick={() => setView('login')} className="text-sm text-gray-500">登出</button>
+                            </div>
+
+                            <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4 bg-white">
+                                <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-300 rounded-xl bg-blue-50 cursor-pointer hover:bg-blue-100 transition">
+                                    <Upload className="w-8 h-8 text-blue-500 mb-2" />
+                                    <span className="font-bold text-blue-600">匯入學員成績檔 (可多選)</span>
+                                    <span className="text-xs text-blue-400 mt-1">支援 .json 格式</span>
+                                    <input type="file" multiple accept=".json" onChange={handleImport} className="hidden" />
+                                </label>
+                                <button onClick={exportManagerCSV} disabled={managerData.length === 0} className="flex flex-col items-center justify-center p-6 border-2 border-green-300 rounded-xl bg-green-50 hover:bg-green-100 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                                    <Download className="w-8 h-8 text-green-600 mb-2" />
+                                    <span className="font-bold text-green-700">匯出總報表 (CSV)</span>
+                                    <span className="text-xs text-green-500 mt-1">Excel 可讀取</span>
+                                </button>
+                            </div>
+
+                            <div className="flex-grow overflow-auto p-0">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-100 text-gray-600 sticky top-0">
+                                        <tr>
+                                            <th className="p-3">姓名</th>
+                                            <th className="p-3">部門</th>
+                                            <th className="p-3">分數</th>
+                                            <th className="p-3">結果</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {managerData.map((row, i) => (
+                                            <tr key={i}>
+                                                <td className="p-3 font-bold">{row.name}</td>
+                                                <td className="p-3 text-gray-500">{row.dept}</td>
+                                                <td className="p-3 font-bold">{row.score}</td>
+                                                <td className="p-3">
+                                                    {row.score >= 70 ? <span className="text-green-600 bg-green-100 px-2 py-1 rounded text-xs">通過</span> : <span className="text-red-500 bg-red-100 px-2 py-1 rounded text-xs">未通過</span>}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {managerData.length === 0 && <p className="text-center text-gray-400 py-10">尚無資料，請先匯入學員成績檔</p>}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return null;
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
